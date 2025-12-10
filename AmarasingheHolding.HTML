@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Amarasinghe Holdings Inventory</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:Segoe UI,sans-serif;background:#f4f7f9;margin:0;}
+header{background:#003b77;color:#fff;padding:15px;font-size:24px;text-align:center;}
+nav{display:flex;flex-wrap:wrap;justify-content:center;background:#004f92;padding:10px;}
+nav button{background:#0a73d3;color:#fff;border:none;padding:10px 18px;margin:5px;border-radius:6px;cursor:pointer;}
+nav button:hover{background:#095aa8;}
+
+.container{padding:20px;display:none;}
+.active{display:block;}
+
+.card{background:#fff;padding:20px;border-radius:12px;box-shadow:0 2px 10px rgba(0,0,0,.15);margin-bottom:20px;}
+
+input,select{width:100%;padding:10px;margin-top:6px;margin-bottom:12px;border:1px solid #bbb;border-radius:6px;}
+table{width:100%;border-collapse:collapse;margin-top:10px;}
+th,td{border:1px solid #aaa;padding:8px;text-align:center;}
+th{background:#eee;}
+.sold{background:#d1ffd1;}
+.pending{background:#ffdada;}
+
+.btn{padding:8px 14px;border:none;border-radius:5px;color:white;cursor:pointer;margin:2px;}
+.add{background:#1aa31a;}
+.edit{background:#f9a825;}
+.del{background:#d9534f;}
+.sell{background:#0D98FF;}
+.search{background:#0077cc;color:white;padding:7px;border:none;border-radius:5px;cursor:pointer;}
+.print{background:#ff7f00;}
+@media print {
+  body * {visibility:hidden;}
+  #invoice,* #invoice *{visibility:visible;}
+  #invoice{position:absolute;top:0;left:0;width:100%;}
+}
+</style>
+</head>
+<body>
+
+<header>🚗 Amarasinghe Holdings Inventory System</header>
+
+<nav>
+<button onclick="openTab('separate')">Separate Parts</button>
+<button onclick="openTab('lot')">LOT Management</button>
+<button onclick="openTab('dashboard')">Dashboard</button>
+<button onclick="openTab('invoiceTab')">Invoice/Quotation</button>
+</nav>
+
+<!-- SEPARATE PARTS -->
+<div id="separate" class="container active">
+<div class="card">
+<h2>Add Separate Part</h2>
+<input id="sp_name" placeholder="Part Name">
+<input id="sp_date" type="date">
+<input id="sp_buy" type="number" placeholder="Buy Price">
+<input id="sp_sell" type="number" placeholder="Sell Price (later)">
+<button class="btn add" onclick="addSeparate()">ADD PART</button>
+</div>
+
+<div class="card">
+<h2>Search Separate Parts</h2>
+<input id="searchSeparate" placeholder="Search Part Name">
+<button class="search" onclick="searchSeparate()">Search</button>
+<button class="search" onclick="loadSeparate()">Reset</button>
+</div>
+
+<div class="card">
+<h2>Separate Parts Inventory</h2>
+<table id="separateTable"></table>
+</div>
+</div>
+
+<!-- LOT SYSTEM -->
+<div id="lot" class="container">
+<div class="card">
+<h2>Create New LOT</h2>
+<input id="lot_name" placeholder="LOT Name / Vehicle Ref">
+<input id="lot_date" type="date">
+<input id="lot_cost" type="number" placeholder="Total Cost">
+<button class="btn add" onclick="addLot()">CREATE LOT</button>
+</div>
+
+<div class="card">
+<h2>Add Parts to LOT</h2>
+<select id="lot_select"></select>
+<input id="lot_part" placeholder="Part Name">
+<input id="lot_sell" type="number" placeholder="Sell Price (later)">
+<button class="btn add" onclick="addLotPart()">ADD PART TO LOT</button>
+</div>
+
+<div class="card">
+<h2>Search LOTs / Parts</h2>
+<input id="searchLot" placeholder="Search LOT Name or Part Name">
+<button class="search" onclick="searchLot()">Search</button>
+<button class="search" onclick="displayLots()">Reset</button>
+</div>
+
+<div id="lotDisplay"></div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard" class="container">
+<div class="card">
+<h2>Profit Summary Dashboard</h2>
+<p><strong>Total Separate Parts Profit:</strong> <span id="sepProfit">0</span></p>
+<p><strong>Total LOTs Profit:</strong> <span id="lotProfit">0</span></p>
+<p><strong>Overall Total Profit:</strong> <span id="totalProfit">0</span></p>
+<button class="btn add" onclick="updateDashboard()">Refresh Dashboard</button>
+</div>
+</div>
+
+<!-- INVOICE / QUOTATION -->
+<div id="invoiceTab" class="container">
+<div class="card">
+<h2>Generate Invoice / Quotation</h2>
+<select id="invoiceType">
+  <option value="separate">Separate Part</option>
+  <option value="lot">LOT</option>
+</select>
+<select id="invoiceSelect"></select>
+<select id="invoiceMode">
+  <option value="invoice">Invoice</option>
+  <option value="quotation">Quotation</option>
+</select>
+<button class="btn print" onclick="generateInvoice()">Generate</button>
+</div>
+<div id="invoice"></div>
+</div>
+
+<script>
+// ================= ELEMENT REFERENCES =================
+const sp_name = document.getElementById("sp_name");
+const sp_date = document.getElementById("sp_date");
+const sp_buy = document.getElementById("sp_buy");
+const sp_sell = document.getElementById("sp_sell");
+
+const lot_name = document.getElementById("lot_name");
+const lot_date = document.getElementById("lot_date");
+const lot_cost = document.getElementById("lot_cost");
+const lot_select = document.getElementById("lot_select");
+const lot_part = document.getElementById("lot_part");
+const lot_sell = document.getElementById("lot_sell");
+
+const searchSeparateInput = document.getElementById("searchSeparate");
+const searchLotInput = document.getElementById("searchLot");
+const invoiceType = document.getElementById("invoiceType");
+const invoiceSelect = document.getElementById("invoiceSelect");
+const invoiceMode = document.getElementById("invoiceMode");
+
+// ================= DATABASE =================
+let separate = JSON.parse(localStorage.getItem("separate"))||[];
+let lots = JSON.parse(localStorage.getItem("lots"))||[];
+
+// ================= TABS =================
+function openTab(id){
+  document.querySelectorAll(".container").forEach(t=>t.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  if(id==="dashboard") updateDashboard();
+  if(id==="invoiceTab") refreshInvoiceSelect();
+}
+
+// ================= SAVE =================
+function saveDB(){
+  localStorage.setItem("separate",JSON.stringify(separate));
+  localStorage.setItem("lots",JSON.stringify(lots));
+}
+
+// ================= SEPARATE PARTS =================
+function addSeparate(){
+  if(!sp_name.value){alert("Enter Part Name"); return;}
+  separate.push({
+    name:sp_name.value,
+    date:sp_date.value,
+    buy:+sp_buy.value || 0,
+    sell: sp_sell.value? +sp_sell.value : null
+  });
+  saveDB(); loadSeparate();
+  sp_name.value=""; sp_date.value=""; sp_buy.value=""; sp_sell.value="";
+  refreshInvoiceSelect();
+}
+
+function editSeparate(i){
+  let newName=prompt("Edit Part Name:", separate[i].name);
+  if(newName) separate[i].name=newName;
+  let newSell=prompt("Enter Sold Price:", separate[i].sell||0);
+  if(newSell!==null) separate[i].sell=+newSell;
+  saveDB(); loadSeparate();
+}
+
+function deleteSeparate(i){
+  if(confirm("Delete this part?")){
+    separate.splice(i,1); saveDB(); loadSeparate(); refreshInvoiceSelect();
+  }
+}
+
+function loadSeparate(data){
+  data = data||separate;
+  let T="<tr><th>Name</th><th>Date</th><th>Buy</th><th>Sell</th><th>Profit</th><th>Actions</th></tr>";
+  data.forEach((p,i)=>{
+    let pr = (p.sell!==null)?(p.sell-p.buy):"Pending";
+    T+=`<tr class="${p.sell!==null?'sold':'pending'}">
+    <td>${p.name}</td><td>${p.date}</td><td>${p.buy}</td><td>${p.sell!==null?p.sell:'Pending'}</td><td>${pr}</td>
+    <td>
+    <button class="btn edit" onclick="editSeparate(${i})">Edit</button>
+    <button class="btn del" onclick="deleteSeparate(${i})">Delete</button>
+    </td>
+    </tr>`;
+  });
+  document.getElementById("separateTable").innerHTML=T;
+}
+loadSeparate();
+
+function searchSeparate(){
+  let key=searchSeparateInput.value.toLowerCase();
+  let results=separate.filter(p=>p.name.toLowerCase().includes(key));
+  loadSeparate(results);
+}
+
+// ================= LOT SYSTEM =================
+function addLot(){
+  if(!lot_name.value){alert("Enter LOT Name"); return;}
+  lots.push({name:lot_name.value,date:lot_date.value,cost:+lot_cost.value,parts:[]});
+  saveDB(); refreshLotDropdown(); displayLots();
+  lot_name.value=""; lot_date.value=""; lot_cost.value="";
+}
+
+function refreshLotDropdown(){
+  lot_select.innerHTML="";
+  lots.forEach((l,i)=>lot_select.innerHTML+=`<option value="${i}">${l.name}</option>`);
+}
+refreshLotDropdown();
+
+function addLotPart(){
+  let idx = lot_select.value;
+  if(idx===""){alert("Create LOT first!");return;}
+  if(!lot_part.value){alert("Enter Part Name"); return;}
+  lots[idx].parts.push({name:lot_part.value,sell: lot_sell.value? +lot_sell.value:null});
+  saveDB(); displayLots();
+  lot_part.value=""; lot_sell.value="";
+}
+
+function editLotPart(l,p){
+  let newName=prompt("Edit Part Name:", lots[l].parts[p].name);
+  if(newName) lots[l].parts[p].name=newName;
+  let newSell=prompt("Enter Sold Price:", lots[l].parts[p].sell||0);
+  if(newSell!==null) lots[l].parts[p].sell=+newSell;
+  saveDB(); displayLots();
+}
+
+function deleteLotPart(l,p){
+  if(confirm("Delete this part?")){lots[l].parts.splice(p,1); saveDB(); displayLots();}
+}
+
+function deleteLot(l){
+  if(confirm("Delete this LOT?")){lots.splice(l,1); saveDB(); refreshLotDropdown(); displayLots();}
+}
+
+function displayLots(data){
+  data = data||lots;
+  let html="";
+  data.forEach((lot,i)=>{
+    let partCount = lot.parts.length;
+    let costPerPart = partCount>0?lot.cost/partCount:0;
+    let soldTotal = 0;
+    html+=`<div class="card" style="border:2px solid #0D98FF;margin-bottom:15px;">
+    <h3>${lot.name} (Date: ${lot.date}, Total Cost: ${lot.cost}) 
+    <button class="btn del" onclick="deleteLot(${i})">Delete LOT</button></h3>
+    <table>
+    <tr><th>Part</th><th>Sell Price</th><th>Profit</th><th>Status</th><th>Actions</th></tr>`;
+    lot.parts.forEach((p,j)=>{
+      let partProfit = p.sell!==null? p.sell - costPerPart : 0;
+      if(p.sell!==null) soldTotal += p.sell;
+      html+=`<tr class="${p.sell!==null?'sold':'pending'}">
+      <td>${p.name}</td>
+      <td>${p.sell!==null?p.sell:"Not Sold"}</td>
+      <td>${p.sell!==null?partProfit.toFixed(2):"-"}</td>
+      <td>${p.sell!==null?"Sold":"Pending"}</td>
+      <td>
+      <button class="btn edit" onclick="editLotPart(${i},${j})">Edit</button>
+      <button class="btn del" onclick="deleteLotPart(${i},${j})">Delete</button>
+      </td>
+      </tr>`;
+    });
+    let lotProfit = soldTotal - lot.cost;
+    html+=`<tr><td colspan="5" style="text-align:right;font-weight:bold;">LOT Profit: ${lotProfit.toFixed(2)}</td></tr>`;
+    html+=`</table></div>`;
+  });
+  document.getElementById("lotDisplay").innerHTML=html;
+}
+
+function searchLot(){
+  let key=searchLotInput.value.toLowerCase();
+  let results=lots.filter(l=>{
+    if(l.name.toLowerCase().includes(key)) return true;
+    return l.parts.some(p=>p.name.toLowerCase().includes(key));
+  });
+  displayLots(results);
+}
+
+// ================= DASHBOARD =================
+function updateDashboard(){
+  let sepProfit = separate.reduce((sum,p)=>sum + (p.sell!==null?(p.sell-p.buy):0),0);
+  let lotProfit = 0;
+  lots.forEach(lot=>{
+    let soldTotal = lot.parts.reduce((sum,p)=>sum + (p.sell!==null?p.sell:0),0);
+    lotProfit += soldTotal - lot.cost;
+  });
+  document.getElementById("sepProfit").innerText = sepProfit.toFixed(2);
+  document.getElementById("lotProfit").innerText = lotProfit.toFixed(2);
+  document.getElementById("totalProfit").innerText = (sepProfit + lotProfit).toFixed(2);
+}
+
+// ================= INVOICE / QUOTATION =================
+function refreshInvoiceSelect(){
+  let type = invoiceType.value;
+  invoiceSelect.innerHTML="";
+  if(type==="separate"){
+    separate.forEach((p,i)=>invoiceSelect.innerHTML+=`<option value="${i}">${p.name}</option>`);
+  }else{
+    lots.forEach((l,i)=>invoiceSelect.innerHTML+=`<option value="${i}">${l.name}</option>`);
+  }
+}
+invoiceType.addEventListener("change",refreshInvoiceSelect);
+
+function generateInvoice(){
+  let type = invoiceType.value;
+  let idx = invoiceSelect.value;
+  let mode = invoiceMode.value;
+  let html=`<h2>${mode.toUpperCase()} - ${type==="separate"?"Separate Part":"LOT"}</h2><table><tr><th>Part</th><th>Sell Price</th><th>Profit</th></tr>`;
+  let total=0;
+  if(type==="separate"){
+    let p = separate[idx];
+    let sell = mode==="invoice"? (p.sell!==null?p.sell:0):0;
+    let profit = sell>0?sell-p.buy:0;
+    total = sell;
+    html+=`<tr><td>${p.name}</td><td>${sell}</td><td>${profit}</td></tr>`;
+  }else{
+    let lot = lots[idx];
+    let partCount = lot.parts.length;
+    let costPerPart = partCount>0?lot.cost/partCount:0;
+    lot.parts.forEach(p=>{
+      let sell = mode==="invoice"? (p.sell!==null?p.sell:0):0;
+      let profit = sell>0?sell-costPerPart:0;
+      total += sell;
+      html+=`<tr><td>${p.name}</td><td>${sell}</td><td>${profit.toFixed(2)}</td></tr>`;
+    });
+    total -= mode==="invoice"?lot.cost:0;
+  }
+  html+=`<tr><td colspan="2" style="text-align:right;font-weight:bold;">Total</td><td>${total.toFixed(2)}</td></tr></table>`;
+  html+=`<button class="btn print" onclick="window.print()">Print</button>`;
+  document.getElementById("invoice").innerHTML = html;
+}
+
+</script>
+
+</body>
+</html>
